@@ -46,6 +46,9 @@ public class Installation implements LauncherRunContext, ExtensionInstallationCo
     /** The list of app jars. */
     private final List<File> appJars = new ArrayList<>();
 
+    /** The effective, merged feature used to launch. */
+    private String effectiveFeature;
+
     /**
      * Add an application jar.
      * @param jar The application jar
@@ -132,6 +135,16 @@ public class Installation implements LauncherRunContext, ExtensionInstallationCo
         return this.installables;
     }
 
+    @Override
+    public String getEffectiveFeature() {
+        return effectiveFeature;
+    }
+
+    public void setEffectiveFeature(String featureJsonText) {
+        effectiveFeature = featureJsonText;
+    }
+
+
     /**
      * Clear all in-memory objects
      */
@@ -140,5 +153,6 @@ public class Installation implements LauncherRunContext, ExtensionInstallationCo
         this.fwkProperties.clear();
         this.bundleMap.clear();
         this.installables.clear();
+        this.effectiveFeature = null;
     }
 }

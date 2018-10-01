@@ -39,8 +39,13 @@ public class FrameworkRunner extends AbstractRunner {
     public FrameworkRunner(final Map<String, String> frameworkProperties,
             final Map<Integer, List<File>> bundlesMap,
             final List<Object[]> configurations,
-            final List<File> installables) throws Exception {
+            final List<File> installables,
+            final String effectiveFeature) throws Exception {
         super(frameworkProperties, configurations, installables);
+
+        /* */
+        System.out.println("*** Effective Feature ***" + effectiveFeature);
+        /* */
 
         final ServiceLoader<FrameworkFactory> loader = ServiceLoader.load(FrameworkFactory.class);
         FrameworkFactory factory = null;
@@ -78,7 +83,7 @@ public class FrameworkRunner extends AbstractRunner {
             }
         });
 
-        this.setupFramework(framework, bundlesMap);
+        this.setupFramework(framework, bundlesMap, effectiveFeature);
 
 
         long time = System.currentTimeMillis();

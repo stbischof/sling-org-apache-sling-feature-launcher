@@ -16,13 +16,6 @@
  */
 package org.apache.sling.feature.launcher.impl.launchers;
 
-import java.io.File;
-import java.lang.reflect.Constructor;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Callable;
-
 import org.apache.commons.lang.text.StrLookup;
 import org.apache.commons.lang.text.StrSubstitutor;
 import org.apache.sling.feature.Artifact;
@@ -33,6 +26,13 @@ import org.apache.sling.feature.launcher.spi.Launcher;
 import org.apache.sling.feature.launcher.spi.LauncherPrepareContext;
 import org.apache.sling.feature.launcher.spi.LauncherRunContext;
 import org.osgi.framework.Constants;
+
+import java.io.File;
+import java.lang.reflect.Constructor;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Callable;
 
 /**
  * Launcher directly using the OSGi launcher API.
@@ -111,12 +111,13 @@ public class FrameworkLauncher implements Launcher {
         }
 
         final Class<?> runnerClass = cl.loadClass(FrameworkRunner.class.getName());
-        final Constructor<?> constructor = runnerClass.getDeclaredConstructor(Map.class, Map.class, List.class, List.class);
+        final Constructor<?> constructor = runnerClass.getDeclaredConstructor(Map.class, Map.class, List.class, List.class, String.class);
         constructor.setAccessible(true);
         Callable<Integer> restart = (Callable<Integer>) constructor.newInstance(properties,
                 context.getBundleMap(),
                 context.getConfigurations(),
-                context.getInstallableArtifacts());
+                context.getInstallableArtifacts(),
+                context.getEffectiveFeature());
 
         return restart.call();
         // nothing else to do, constructor starts everything

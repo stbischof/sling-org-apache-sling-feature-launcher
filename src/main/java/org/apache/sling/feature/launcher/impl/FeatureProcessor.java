@@ -16,19 +16,6 @@
  */
 package org.apache.sling.feature.launcher.impl;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.ServiceLoader;
-import java.util.Spliterator;
-import java.util.Spliterators;
-import java.util.stream.StreamSupport;
-
 import org.apache.sling.feature.Artifact;
 import org.apache.sling.feature.ArtifactId;
 import org.apache.sling.feature.Configuration;
@@ -43,8 +30,20 @@ import org.apache.sling.feature.io.ArtifactHandler;
 import org.apache.sling.feature.io.ArtifactManager;
 import org.apache.sling.feature.io.IOUtils;
 import org.apache.sling.feature.io.json.FeatureJSONReader;
+import org.apache.sling.feature.io.json.FeatureJSONWriter;
 import org.apache.sling.feature.launcher.spi.LauncherPrepareContext;
 import org.apache.sling.feature.launcher.spi.extensions.ExtensionHandler;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.ServiceLoader;
 
 public class FeatureProcessor {
 
@@ -57,6 +56,17 @@ public class FeatureProcessor {
     public static Feature createApplication(final LauncherConfig config,
             final ArtifactManager artifactManager) throws IOException
     {
+        List<FeatureExtensionHandler> extensionHandlers = new ArrayList<>();
+        for (FeatureExtensionHandler feh : ServiceLoader.load(FeatureExtensionHandler.class)) {
+            feh.initialize(a -> {
+                try {
+                    return artifactManager.getArtifactHandler(a.getId().toMvnUrl()).getFile();
+                } catch (IOException ioe) {
+                    throw new RuntimeException(ioe);
+                }
+            });
+            extensionHandlers.add(feh);
+        }
 
         final BuilderContext builderContext = new BuilderContext(
             id -> {
@@ -71,8 +81,8 @@ public class FeatureProcessor {
                     // ignore
                 }
                 return null;
-            }, config.getVariables(), config.getInstallation().getFrameworkProperties()).add(StreamSupport.stream(Spliterators.spliteratorUnknownSize(
-            ServiceLoader.load(FeatureExtensionHandler.class).iterator(), Spliterator.ORDERED), false).toArray(FeatureExtensionHandler[]::new));
+            }, config.getVariables(), config.getInstallation().getFrameworkProperties())
+                .add(extensionHandlers.toArray(new FeatureExtensionHandler[] {}));
 
         List<Feature> features = new ArrayList<>();
 
@@ -140,6 +150,10 @@ public class FeatureProcessor {
                 config.getInstallation().getFrameworkProperties().put(prop.getKey(), prop.getValue());
             }
         }
+
+        StringWriter featureStringWriter = new StringWriter();
+        FeatureJSONWriter.write(featureStringWriter, app);
+        config.getInstallation().setEffectiveFeature(featureStringWriter.toString());
 
         extensions: for(final Extension ext : app.getExtensions()) {
             for (ExtensionHandler handler : ServiceLoader.load(ExtensionHandler.class,  FeatureProcessor.class.getClassLoader()))

@@ -55,4 +55,10 @@ public interface LauncherRunContext {
      * @return The list of files. The list might be empty.
      */
     List<File> getInstallableArtifacts();
+
+    /**
+     * Obtain the effective Feature JSON
+     * @return The effective Feature JSON as a String.
+     */
+    String getEffectiveFeature();
 }

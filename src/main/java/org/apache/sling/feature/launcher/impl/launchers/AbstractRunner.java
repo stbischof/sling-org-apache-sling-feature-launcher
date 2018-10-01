@@ -16,7 +16,9 @@
  */
 package org.apache.sling.feature.launcher.impl.launchers;
 
+import org.apache.sling.feature.launcher.impl.FeaturesServiceImpl;
 import org.apache.sling.feature.launcher.impl.Main;
+import org.apache.sling.feature.service.Features;
 import org.apache.sling.launchpad.api.LaunchpadContentProvider;
 import org.apache.sling.launchpad.api.StartupHandler;
 import org.apache.sling.launchpad.api.StartupMode;
@@ -100,7 +102,8 @@ public abstract class AbstractRunner implements Callable<Integer> {
         }
     }
 
-    protected void setupFramework(final Framework framework, final Map<Integer, List<File>> bundlesMap)
+    protected void setupFramework(final Framework framework, final Map<Integer, List<File>> bundlesMap,
+            String effectiveFeature)
     throws BundleException {
         if ( !configurations.isEmpty() ) {
             this.configAdminTracker = new ServiceTracker<>(framework.getBundleContext(),
@@ -274,6 +277,15 @@ public abstract class AbstractRunner implements Callable<Integer> {
         } catch (NoClassDefFoundError ex) {
             // Ignore, we don't have the launchpad.api
         }
+
+        // Register the feature service asynchronously
+        new Thread(() -> registerFeaturesService(effectiveFeature, framework)).start();
+    }
+
+    // This method is run asynchronously
+    private void registerFeaturesService(String effectiveFeature, Framework framework) {
+        Features featuresService = new FeaturesServiceImpl(effectiveFeature);
+        framework.getBundleContext().registerService(Features.class, featuresService, null);
     }
 
     protected boolean startFramework(final Framework framework, long timeout, TimeUnit unit) throws BundleException, InterruptedException
