@@ -16,22 +16,26 @@
  */
 package org.apache.sling.feature.launcher.impl.launchers;
 
-import org.apache.sling.feature.launcher.impl.FeaturesServiceImpl;
+import org.apache.felix.inventory.InventoryPrinter;
 import org.apache.sling.feature.launcher.impl.Main;
-import org.apache.sling.feature.service.Features;
 import org.apache.sling.launchpad.api.LaunchpadContentProvider;
 import org.apache.sling.launchpad.api.StartupHandler;
 import org.apache.sling.launchpad.api.StartupMode;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.BundleEvent;
 import org.osgi.framework.BundleException;
 import org.osgi.framework.Constants;
 import org.osgi.framework.FrameworkEvent;
 import org.osgi.framework.FrameworkListener;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.launch.Framework;
+import org.osgi.framework.namespace.PackageNamespace;
 import org.osgi.framework.startlevel.BundleStartLevel;
 import org.osgi.framework.startlevel.FrameworkStartLevel;
+import org.osgi.framework.wiring.BundleCapability;
+import org.osgi.framework.wiring.BundleWiring;
+import org.osgi.util.tracker.BundleTracker;
 import org.osgi.util.tracker.ServiceTracker;
 import org.osgi.util.tracker.ServiceTrackerCustomizer;
 
@@ -39,9 +43,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
@@ -83,6 +90,8 @@ public abstract class AbstractRunner implements Callable<Integer> {
     private final AtomicInteger waitRequested = new AtomicInteger(0);
 
     private volatile boolean install;
+
+    private BundleTracker<Bundle> inventoryPrinterTracker;
 
     public AbstractRunner(final Map<String, String> frameworkProperties, final List<Object[]> configurations, final List<File> installables) {
         this.configurations = new ArrayList<>(configurations);
@@ -274,18 +283,56 @@ public abstract class AbstractRunner implements Callable<Integer> {
 
                 }
             }, null);
+
+            this.inventoryPrinterTracker = new BundleTracker<Bundle>(framework.getBundleContext(),
+                Bundle.ACTIVE /* TODO ADD MORE */ , null) {
+                    @Override
+                    public Bundle addingBundle(Bundle bundle, BundleEvent event) {
+                        Bundle b = super.addingBundle(bundle, event);
+
+                        BundleWiring bw = b.adapt(BundleWiring.class);
+                        for (BundleCapability cap : bw.getCapabilities(PackageNamespace.PACKAGE_NAMESPACE)) {
+                            if ("org.apache.felix.inventory".equals(cap.getAttributes().get(PackageNamespace.PACKAGE_NAMESPACE))) {
+                                try {
+                                    registerFeatureInventoryPrinter(framework.getBundleContext(), bw, effectiveFeature);
+                                } catch (ClassNotFoundException e) {
+                                    // Ignore
+                                }
+                            }
+                        }
+
+                        return b;
+                    }
+            };
+            this.inventoryPrinterTracker.open();
         } catch (NoClassDefFoundError ex) {
             // Ignore, we don't have the launchpad.api
         }
-
-        // Register the feature service asynchronously
-        new Thread(() -> registerFeaturesService(effectiveFeature, framework)).start();
     }
 
-    // This method is run asynchronously
-    private void registerFeaturesService(String effectiveFeature, Framework framework) {
-        Features featuresService = new FeaturesServiceImpl(effectiveFeature);
-        framework.getBundleContext().registerService(Features.class, featuresService, null);
+    protected void registerFeatureInventoryPrinter(BundleContext bundleContext, BundleWiring bundleWiring, String effectiveFeature) throws ClassNotFoundException {
+        Class<?> invPrinterCls = bundleWiring.getClassLoader().loadClass(InventoryPrinter.SERVICE);
+
+        Object proxy = Proxy.newProxyInstance(bundleWiring.getClassLoader(), new Class[] {invPrinterCls}, new InvocationHandler() {
+            @Override
+            public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                switch (method.getName()) {
+                case "print":
+                    PrintWriter pw = (PrintWriter) args[0];
+                    pw.print(effectiveFeature);
+                    break;
+                default:
+                    // TODO support Object methods
+                };
+                return null;
+            }
+        });
+
+        Dictionary<String, Object> props = new Hashtable<>();
+        props.put(InventoryPrinter.NAME, "launch.features");
+        props.put(InventoryPrinter.TITLE, "Launch Features");
+        props.put(InventoryPrinter.FORMAT, "JSON");
+        bundleContext.registerService(InventoryPrinter.SERVICE, proxy, props);
     }
 
     protected boolean startFramework(final Framework framework, long timeout, TimeUnit unit) throws BundleException, InterruptedException
