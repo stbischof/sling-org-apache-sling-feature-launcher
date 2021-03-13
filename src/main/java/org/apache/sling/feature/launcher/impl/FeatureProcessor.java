@@ -24,6 +24,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,7 @@ import org.apache.sling.feature.ArtifactId;
 import org.apache.sling.feature.Configuration;
 import org.apache.sling.feature.Extension;
 import org.apache.sling.feature.ExtensionState;
+import org.apache.sling.feature.ExtensionType;
 import org.apache.sling.feature.Feature;
 import org.apache.sling.feature.builder.ArtifactProvider;
 import org.apache.sling.feature.builder.BuilderContext;
@@ -49,6 +51,7 @@ import org.apache.sling.feature.io.artifacts.ArtifactHandler;
 import org.apache.sling.feature.io.artifacts.ArtifactManager;
 import org.apache.sling.feature.io.json.FeatureJSONReader;
 import org.apache.sling.feature.launcher.spi.LauncherPrepareContext;
+import org.apache.sling.feature.launcher.spi.extensions.ExtensionContext;
 import org.apache.sling.feature.launcher.spi.extensions.ExtensionHandler;
 import org.slf4j.Logger;
 
@@ -206,8 +209,15 @@ public class FeatureProcessor {
             }
         }
 
+        ExtensionHandlerInstaller extensionHandlerInstaller = new FeatureProcessor.ExtensionHandlerInstaller();
+        for (final Extension ext : app.getExtensions()) {
+
+            extensionHandlerInstaller.handle(
+                    new ExtensionContextImpl(ctx, config.getInstallation(), loadedFeatures), ext);
+        }
+
         extensions: for(final Extension ext : app.getExtensions()) {
-            for (ExtensionHandler handler : ServiceLoader.load(ExtensionHandler.class,  FeatureProcessor.class.getClassLoader()))
+            for (ExtensionHandler handler : ServiceLoader.load(ExtensionHandler.class, dynCl))
             {
                 if (handler.handle(new ExtensionContextImpl(ctx, config.getInstallation(), loadedFeatures), ext)) {
                     continue extensions;
@@ -215,6 +225,48 @@ public class FeatureProcessor {
             }
             if ( ext.getState() == ExtensionState.REQUIRED ) {
                 throw new Exception("Unknown required extension " + ext.getName());
+            }
+        }
+    }
+
+    private static class DynamicClassLoader extends URLClassLoader {
+
+        public DynamicClassLoader() {
+
+            super(new URL[] {}, FeatureProcessor.class.getClassLoader());
+        }
+
+        @Override
+        public void addURL(URL url) {
+
+            super.addURL(url);
+        }
+    }
+
+    private static DynamicClassLoader dynCl = new DynamicClassLoader();
+
+    private static class ExtensionHandlerInstaller implements ExtensionHandler {
+
+        /**
+         * Common extension name to specify the {@link ExtensionHandlerInstaller}. This
+         * extension is of type {@link ExtensionType#ARTIFACTS} and is required.
+         */
+        public static final String EXTENSION_NAME_EXTENSION_HANDLER_INSTALLER = "extension-installer";
+
+        @Override
+        public boolean handle(ExtensionContext context, Extension extension) throws IOException {
+
+            if (extension.getType() == ExtensionType.ARTIFACTS
+                    && extension.getName().equals(EXTENSION_NAME_EXTENSION_HANDLER_INSTALLER)) {
+                for (final Artifact a : extension.getArtifacts()) {
+                    URL url = context.getArtifactFile(a.getId());
+                    try (URLClassLoader cl = new URLClassLoader(new URL[] { url })) {
+                        FeatureProcessor.dynCl.addURL(url);
+                    }
+                }
+                return true;
+            } else {
+                return false;
             }
         }
     }
