@@ -53,8 +53,6 @@
                 -conditionalpackage:\
                  javax.json*,\
                  org.apache.commons.cli.*,\
-                 org.apache.commons.lang3.*,\
-                 org.apache.commons.text.*,\
                  org.apache.felix.cm.json.*,\
                  org.apache.felix.converter.*,\
                  org.apache.johnzon.core.*,\
@@ -104,18 +102,6 @@
     </build>
 
     <dependencies>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-text</artifactId>
-            <version>1.8</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>3.10</version>
-            <scope>provided</scope>
-        </dependency>
         <dependency>
             <groupId>org.osgi</groupId>
             <artifactId>osgi.core</artifactId>

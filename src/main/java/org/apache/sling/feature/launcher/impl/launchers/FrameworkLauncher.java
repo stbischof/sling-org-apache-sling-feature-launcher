@@ -23,8 +23,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-import org.apache.commons.text.StringSubstitutor;
-import org.apache.commons.text.lookup.StringLookup;
 import org.apache.sling.feature.ArtifactId;
 import org.apache.sling.feature.Feature;
 import org.apache.sling.feature.launcher.spi.Launcher;
@@ -53,23 +51,7 @@ public class FrameworkLauncher implements Launcher {
      */
     @Override
     public int run(final LauncherRunContext context, final ClassLoader cl) throws Exception {
-        StringSubstitutor ss = new StringSubstitutor(new StringLookup() {
-
-            @Override
-            public String lookup(final String key) {
-                // Normally if a variable cannot be found, StrSubstitutor will
-                // leave the raw variable in place. We need to replace it with
-                // nothing in that case.
-                final String value = context.getFrameworkProperties().get(key);
-                return value == null ? "" : value;
-            }
-        });
-        ss.setEnableSubstitutionInVariables(true);
-
-        Map<String, String> properties = new HashMap<>();
-        context.getFrameworkProperties().forEach((key, value) -> {
-            properties.put(key, ss.replace(value).replace("{dollar}", "$"));
-        });
+        Map<String, String> properties = substitutedFwProps(context.getFrameworkProperties());
         if (context.getLogger().isDebugEnabled()) {
             context.getLogger().debug("Bundles:");
             for(final Integer key : context.getBundleMap().keySet()) {
@@ -105,7 +87,60 @@ public class FrameworkLauncher implements Launcher {
         // nothing else to do, constructor starts everything
     }
 
+    static Map<String, String> substitutedFwProps(Map<String, String> fwProps) {
+
+        StringSubstitutor ss=new StringSubstitutor(fwProps);
+        Map<String, String> properties = new HashMap<>();
+        fwProps.forEach(
+                (key, value) -> properties.put(key, ss.replace(value).replace("{dollar}", "$"))        );
+        return properties;
+    }
+
     protected String getFrameworkRunnerClass() {
         return FrameworkRunner.class.getName();
+    }
+
+    private static class StringSubstitutor {
+        private static final String END = "}";
+        private static final String START = "${";
+        private Map<String, String> map;
+        public StringSubstitutor(Map<String, String> map) {
+
+            this.map = map;
+        }
+
+        public String replace(String text) {
+
+            StringBuilder sb = new StringBuilder();
+            int iStart = text.indexOf(START);
+            int iEnd = text.indexOf(END);
+
+            if (iStart < 0) {//no Start
+                return text.substring(0, iEnd < 0 ? text.length() : iEnd);
+            } else if (iStart < iEnd) {// Start
+                String pre = text.substring(0, iStart);
+                sb.append(pre);
+                String leftover = text.substring(iStart + 2);
+
+                int startInner = leftover.indexOf(START);
+                int endInner = leftover.indexOf(END);
+                if (startInner>=0&&startInner < endInner) {// Start
+                    
+                    String inner = replace(leftover);
+                    String val = replace(START + inner);
+                    sb.append(val);
+                } else {// End
+                    String variable = leftover.substring(0, endInner);
+                    String replacement = map.get(variable);
+                    replacement = replacement == null ? "" : replacement;
+
+                    String suf = leftover.substring(endInner + 1, leftover.length());
+                        sb.append(replace(replacement)+suf);
+                }
+            }else {
+                sb.append(text);
+            }
+            return sb.toString();
+        }
     }
 }
