@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# we are on ubuntu xenial (16.4) java-11 is hard to install so we tage java 8
+apt-get update -y
+apt-get install default-jdk maven -y
+java -version
+mvn -version
+mvn clean package -P container
+
+# tags the maven-generated image with the docker-Hub estimated $IMAGE_NAME,
+# the default hook/push will collect this by default when no hook/push is set
+docker tag stbischof/sling-org-apache-sling-feature-launcher:latest $IMAGE_NAME
+
+# additional tag with project version,
+# could be extracted into hook/push but then the default one also should be pushed
+PROJECT_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+echo $PROJECT_VERSION
+docker tag stbischof/sling-org-apache-sling-feature-launcher:latest tbischof/sling-org-apache-sling-feature-launcher:$PROJECT_VERSION
+docker push index.docker.io/stbischof/sling-org-apache-sling-feature-launcher:$PROJECT_VERSION
+

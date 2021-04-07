@@ -281,7 +281,7 @@
                         <configuration>
                             <images>
                                 <image>
-                                    <name>apache/sling-feature-launcher:${project.version}</name>
+                                    <name>stbischof/sling-org-apache-sling-feature-launcher:${project.version}</name>
                                     <build>
                                         <tags>
                                             <tag>latest</tag>
