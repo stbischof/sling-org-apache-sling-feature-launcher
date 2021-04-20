@@ -24,6 +24,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,7 @@ import java.util.stream.StreamSupport;
 import org.apache.sling.feature.Artifact;
 import org.apache.sling.feature.ArtifactId;
 import org.apache.sling.feature.Configuration;
+import org.apache.sling.feature.ExecutionEnvironmentExtension;
 import org.apache.sling.feature.Extension;
 import org.apache.sling.feature.ExtensionState;
 import org.apache.sling.feature.Feature;
@@ -206,8 +208,19 @@ public class FeatureProcessor {
             }
         }
 
+        ExecutionEnvironmentExtension execEnvExt=  ExecutionEnvironmentExtension.getExecutionEnvironmentExtension(app);
+
+        List<Artifact> artifacts= execEnvExt.getClasspathArtifact();
+        
+        for (final Artifact a : artifacts) {
+            URL url = new ExtensionContextImpl(ctx, config.getInstallation(), loadedFeatures).getArtifactFile(a.getId());
+            try (URLClassLoader cl = new URLClassLoader(new URL[] { url },FeatureProcessor.class.getClassLoader())) {
+                FeatureProcessor.dynCl.addURL(url);
+            }
+        }
+        
         extensions: for(final Extension ext : app.getExtensions()) {
-            for (ExtensionHandler handler : ServiceLoader.load(ExtensionHandler.class,  FeatureProcessor.class.getClassLoader()))
+            for (ExtensionHandler handler : ServiceLoader.load(ExtensionHandler.class,  dynCl))
             {
                 if (handler.handle(new ExtensionContextImpl(ctx, config.getInstallation(), loadedFeatures), ext)) {
                     continue extensions;
@@ -218,4 +231,18 @@ public class FeatureProcessor {
             }
         }
     }
+
+    private static DynamicClassLoader dynCl = new DynamicClassLoader();
+    private static class DynamicClassLoader extends URLClassLoader {
+
+        public DynamicClassLoader() {
+            super(new URL[] {}, FeatureProcessor.class.getClassLoader());
+        }
+
+        @Override
+        public void addURL(URL url) {
+            super.addURL(url);
+        }
+    }
+
 }
